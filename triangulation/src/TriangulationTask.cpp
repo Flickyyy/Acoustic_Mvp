@@ -77,6 +77,8 @@ TriangulationTask::TriangulationTask(vector <Sensor> sensors, vector <SensorMess
     }
     if(this_sensors.size() == 3 && messages.size() == 3) Triangulator triangulator(this_sensors, messages);
     else if(this_sensors.size() > 3 || messages.size() > 3) Triangulator triangulator({this_sensors[0], this_sensors[1], this_sensors[2]},{messages[0], messages[1], messages[2]});
+    Logger logger(".log");
+    logger.addWriting("make task", 'I');
 
 }
 
@@ -85,5 +87,7 @@ void TriangulationTask::execute()
     string result = to_string(triangulator.PointDeterminate().first) + " " + to_string(triangulator.PointDeterminate().second);
     RedisPublisher publisher(host, port, publish_channel);
     publisher.publish(publish_channel, result);
+    Logger logger(".log");
+    logger.addWriting("Cord is: " + result, 'I');
     
 }
