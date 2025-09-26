@@ -53,16 +53,16 @@ bool compareMessage(const SensorMessage& a, const SensorMessage& b)
 
 TriangulationTask::TriangulationTask(vector <Sensor> sensors, vector <SensorMessage> sensors_messages)
 { //переписать, добавить массив messages с которыми работаем, добавить массив датчиков с которыми работаем.
-    int delta_time = 100, temp = 0; 
+    int delta_time = 100; u_int64_t temp = 0; 
     vector <SensorMessage> messages;
     vector <Sensor> this_sensors;
     /*
     sort(sensors.begin(), sensors.end(), compareSensor);
     sort(sensors_messages.begin(), sensors_messages.end(), compareMessage); */
-    temp = time2int(sensors_messages[sensors_messages.size()-1].timestump);
+    temp = sensors_messages[sensors_messages.size()-1].timestump;
     for(auto e : sensors_messages)
     {
-        if(abs(time2int(e.timestump) - temp) <= delta_time)
+        if(abs( static_cast<int64_t>(e.timestump - temp)) <= delta_time)
         {
             messages.push_back(e);
         }

@@ -151,7 +151,9 @@ SensorMessage RedisSubscriber::sensor_listen()
         SensorMessage message;
         message.mac = topic_name;
         message.timestump = data["time"];
-        message.pcm_sound = hex_to_dec(data["data"]);
+        vector <int16_t> temp;
+        for(auto e : data["data"]) temp.push_back(e);
+        message.pcm_sound = temp;
         return message;
     }
     catch(js_err& err)
