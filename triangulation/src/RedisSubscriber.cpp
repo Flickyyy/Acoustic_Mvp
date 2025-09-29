@@ -82,62 +82,109 @@ void RedisSubscriber::subscribe(string topic)
     freeReplyObject(channel_reply);
 }
 
-vector <Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
+vector<Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
 {
     Logger logger(".log");
     string message_str = "";
     redisReply* message_repl = nullptr;
-    if(redisGetReply(context, (void**)&message_repl) == REDIS_OK) 
+    
+    // Получаем ответ от Redis
+    if(redisGetReply(context, (void**)&message_repl) != REDIS_OK) 
     {
-        if (message_repl && 
-            message_repl->type == REDIS_REPLY_ARRAY && 
-            message_repl->elements == 3)
-        {
-            // Проверяем каждый элемент перед доступом
-            if (message_repl->element[0] && message_repl->element[0]->str) {
-                string action = message_repl->element[0]->str;
-            }
-            if (message_repl->element[1] && message_repl->element[1]->str) {
-                string topic_name = message_repl->element[1]->str;
-            }
-            if (message_repl->element[2] && message_repl->element[2]->str) {
-                message_str = message_repl->element[2]->str;
-            }
-        }
-        else logger.addWriting("error redis remote", 'E');
-        freeReplyObject(message_repl);
-        if (message_str.empty()) {
-            logger.addWriting("Empty message string", 'E');
+        logger.addWriting("Failed to get Redis reply", 'E');
+        if (message_repl) freeReplyObject(message_repl);
+        return vector<Sensor>();
+    }
+
+    // Обрабатываем ответ Redis
+    if (message_repl == nullptr) {
+        logger.addWriting("Null Redis reply", 'E');
+        return vector<Sensor>();
+    }
+
+    if (message_repl->type == REDIS_REPLY_ARRAY && message_repl->elements == 3) {
+        // Безопасно извлекаем данные из массива
+        if (message_repl->element[2] && 
+            message_repl->element[2]->type == REDIS_REPLY_STRING && 
+            message_repl->element[2]->str) {
+            message_str = string(message_repl->element[2]->str);
+        } else {
+            logger.addWriting("Invalid message element in Redis reply", 'E');
+            freeReplyObject(message_repl);
             return vector<Sensor>();
         }
+    } else {
+        logger.addWriting("Invalid Redis reply format", 'E');
+        freeReplyObject(message_repl);
+        return vector<Sensor>();
     }
-    try
-    {
+    
+    freeReplyObject(message_repl);
+
+    // Проверяем, что получили непустое сообщение
+    if (message_str.empty()) {
+        logger.addWriting("Empty message string from Redis", 'E');
+        return vector<Sensor>();
+    }
+
+    vector<Sensor> sensors;
+    
+    try {
+        // Парсим JSON
         json data = json::parse(message_str);
-        vector <Sensor> sensors;
-        for(auto e : data["sensors"]) 
-        {
+        
+        // Проверяем наличие обязательного поля sensors
+        if (!data.contains("sensors") || !data["sensors"].is_array()) {
+            logger.addWriting("Missing or invalid 'sensors' field in JSON", 'E');
+            return vector<Sensor>();
+        }
+
+        // Обрабатываем каждый сенсор
+        for (const auto& e : data["sensors"]) {
+            // Проверяем обязательные поля
+            if (!e.contains("mac") || !e.contains("x") || !e.contains("y")) {
+                logger.addWriting("Missing required fields in sensor JSON", 'E');
+                continue; // Пропускаем некорректный сенсор, но продолжаем обработку
+            }
+
+            // Проверяем типы данных
+            if (!e["mac"].is_string() || !e["x"].is_number() || !e["y"].is_number()) {
+                logger.addWriting("Invalid data types in sensor JSON", 'E');
+                continue;
+            }
+
+            string mac = e["mac"];
             
-            topics.push_back(e["mac"]);
+            // Добавляем в topics если еще нет
+            if (find(topics.begin(), topics.end(), mac) == topics.end()) {
+                topics.push_back(mac);
+            }
+
+            // Создаем сенсор
             Sensor temp;
-            if (e.contains("mac") && e.contains("x") && e.contains("y")) 
-            {
-                temp.mac = e["mac"];
-                temp.x = e["x"]; 
-                temp.y = e["y"];
-                sensors.push_back(temp);
-            } 
-            else 
-            {
-                logger.addWriting("Missing required fields in JSON", 'E');
+            temp.mac = mac;
+            temp.x = e["x"];
+            temp.y = e["y"];
+            sensors.push_back(temp);
+        }
+
+        // Подписываемся на topics
+        for (const auto& topic : topics) {
+            try {
+                subscriber.subscribe(topic);
+            } catch (const exception& sub_err) {
+                logger.addWriting("Failed to subscribe to topic: " + topic + " - " + string(sub_err.what()), 'E');
             }
         }
-        for(auto e : topics) subscriber.subscribe(e);
+
         return sensors;
-    }
-    catch(js_err& err)
-    {
-        return vector <Sensor>();
+
+    } catch (const json::exception& err) {
+        logger.addWriting("JSON parse error: " + string(err.what()), 'E');
+        return vector<Sensor>();
+    } catch (const exception& err) {
+        logger.addWriting("Unexpected error in updateTopics: " + string(err.what()), 'E');
+        return vector<Sensor>();
     }
 }
 
