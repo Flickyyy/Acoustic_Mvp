@@ -106,6 +106,10 @@ vector <Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
         }
         else logger.addWriting("error redis remote", 'E');
         freeReplyObject(message_repl);
+        if (message_str.empty()) {
+            logger.addWriting("Empty message string", 'E');
+            return vector<Sensor>();
+        }
     }
     try
     {
@@ -113,11 +117,20 @@ vector <Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
         vector <Sensor> sensors;
         for(auto e : data["sensors"]) 
         {
+            
             topics.push_back(e["mac"]);
             Sensor temp;
-            temp.mac = e["mac"]; temp.name = e["name"];
-            temp.x = e["x"]; temp.y = e["y"];
-            sensors.push_back(temp);
+            if (e.contains("mac") && e.contains("x") && e.contains("y")) 
+            {
+                temp.mac = e["mac"];
+                temp.x = e["x"]; 
+                temp.y = e["y"];
+                sensors.push_back(temp);
+            } 
+            else 
+            {
+                logger.addWriting("Missing required fields in JSON", 'E');
+            }
         }
         for(auto e : topics) subscriber.subscribe(e);
         return sensors;

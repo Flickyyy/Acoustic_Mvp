@@ -28,6 +28,7 @@ set(SOURCES
     src/RedisSubscriber.cpp
     src/ThreadPool.cpp
     src/TriangulationTask.cpp
+    src/TriangulationService.cpp
     src/Triangulator.cpp
     main.cpp
 )
