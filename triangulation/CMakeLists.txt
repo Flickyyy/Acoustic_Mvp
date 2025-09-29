@@ -1,30 +1,48 @@
 cmake_minimum_required(VERSION 3.10)
+project(triangulation_service)
 
-project(triangulation LANGUAGES CXX)
-
-# стандарт C++
+# Установка стандарта C++
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_BUILD_TYPE Debug)
-# предупреждения и оптимизация
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -O2")
 
-# путь к include/
-include_directories(${PROJECT_SOURCE_DIR}/include)
+# Поиск необходимых пакетов
+find_package(Threads REQUIRED)
 
-# собираем все cpp
-file(GLOB SOURCES
-    ${PROJECT_SOURCE_DIR}/src/*.cpp
-    ${PROJECT_SOURCE_DIR}/main.cpp
+# Предполагаем, что используется hiredis для Redis
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
+find_library(HIREDIS_LIBRARY hiredis)
+
+if(NOT HIREDIS_INCLUDE_DIR OR NOT HIREDIS_LIBRARY)
+    message(WARNING "hiredis not found. You may need to install libhiredis-dev")
+endif()
+
+# Включение директорий
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${HIREDIS_INCLUDE_DIR}
 )
 
-# исполняемый файл
-add_executable(${PROJECT_NAME} ${SOURCES})
+# Список исходных файлов
+set(SOURCES
+    src/RedisPublisher.cpp
+    src/RedisSubscriber.cpp
+    src/ThreadPool.cpp
+    src/TriangulationTask.cpp
+    src/Triangulator.cpp
+    main.cpp
+)
 
-# ищем и подключаем hiredis
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(HIREDIS REQUIRED hiredis)
+# Создание исполняемого файла
+add_executable(triangulation_service ${SOURCES})
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${HIREDIS_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} ${HIREDIS_LIBRARIES})
+# Подключение заголовочных файлов
+target_include_directories(triangulation_service PRIVATE include)
 
+# Подключение библиотек
+target_link_libraries(triangulation_service
+    Threads::Threads
+    ${HIREDIS_LIBRARY}
+)
+
+# Установка целевого файла
+install(TARGETS triangulation_service DESTINATION bin)
