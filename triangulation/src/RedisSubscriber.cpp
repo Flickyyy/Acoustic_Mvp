@@ -89,11 +89,20 @@ vector <Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
     redisReply* message_repl = nullptr;
     if(redisGetReply(context, (void**)&message_repl) == REDIS_OK) 
     {
-        if ((*message_repl).type == REDIS_REPLY_ARRAY && (*message_repl).elements == 3)
+        if (message_repl && 
+            message_repl->type == REDIS_REPLY_ARRAY && 
+            message_repl->elements == 3)
         {
-            string action = (*(*message_repl).element[0]).str,
-            topic_name = (*(*message_repl).element[1]).str;
-            message_str = (*(*message_repl).element[2]).str;
+            // Проверяем каждый элемент перед доступом
+            if (message_repl->element[0] && message_repl->element[0]->str) {
+                string action = message_repl->element[0]->str;
+            }
+            if (message_repl->element[1] && message_repl->element[1]->str) {
+                string topic_name = message_repl->element[1]->str;
+            }
+            if (message_repl->element[2] && message_repl->element[2]->str) {
+                message_str = message_repl->element[2]->str;
+            }
         }
         else logger.addWriting("error redis remote", 'E');
         freeReplyObject(message_repl);
