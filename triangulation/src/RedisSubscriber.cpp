@@ -210,7 +210,7 @@ SensorMessage RedisSubscriber::sensor_listen()
         SensorMessage message;
         message.mac = topic_name;
         message.timestump = data["timestump"];
-        message.pcm_sound = hex_to_dec(data["pcm_data"]);
+        message.pcm_sound = data["pcm_data"];
         return message;
     }
     catch(js_err& err)
