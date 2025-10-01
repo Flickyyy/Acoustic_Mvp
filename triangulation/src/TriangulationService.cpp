@@ -28,9 +28,55 @@ void message_output(vector <SensorMessage> a)
     for(auto e : a) cout << e.timestump << "\n";
 }
 
+bool contain(vector <Sensor> a, Sensor k)
+{
+    for(auto e : a)
+    {
+        if(e.mac == k.mac) return true;
+    }
+    return false;
+}
+
+bool contains_mac(vector <SensorMessage> messages, string mac)
+{
+    for(int i=0; i<messages.size(); i++) 
+    {
+        if(messages[i].mac == mac ) return true;
+    }
+    return false;
+}
+
+vector <SensorMessage> worked_messages(vector <SensorMessage> messages)
+{
+    vector <SensorMessage> result;
+    result.push_back(messages[messages.size()-1]);
+    for(int i=messages.size()-2; i>0; i--)
+    {
+        if(!contains_mac(result, messages[i].mac) &&
+           abs(static_cast<double>(result[0].timestump - messages[i].timestump)) < 70)
+        {
+            result.push_back(messages[i]);
+        }
+
+        if(result.size() == 3) return result;
+    }
+    return vector <SensorMessage> ();
+}
+
+vector <Sensor> curr_sens(vector <SensorMessage>  messages, vector <Sensor> sensors)
+{
+    vector <Sensor> result;
+    for(auto e : sensors)
+    {
+        if(contains_mac(messages, e.mac)) result.push_back(e);
+        if(result.size() == 3) return result;
+    }
+    return vector <Sensor> ();
+}
+
 TriangulationService::TriangulationService() : 
-    updater("localhost", 6379),    // отдельный контекст для апдейтов
-    listener("localhost", 6379),   // отдельный контекст для прослушивания  
+    updater(host, port), 
+    listener(host, port), 
     task_pool(20),
     logger(".log")
 {
@@ -44,77 +90,79 @@ TriangulationService::TriangulationService() :
     logger.addWriting("Triangulation service start successfully", 'I');
 }
 
-bool contain(vector <Sensor> a, Sensor k)
-{
-    for(auto e : a)
-    {
-        if(e.mac == k.mac) return true;
-    }
-    return false;
-}
-
 void TriangulationService::start()
 {
-    atomic <bool> running{true};
+    running = true;
     mutex mtx;
 
-    
-    // прослушивание датчиков
-    thread listen_thread([&]()
+    thread listen_thread([this, &mtx]()  // Захватываем this
     {
-        while (running) 
+        while (this->running)  
         {
-            SensorMessage message = listener.sensor_listen();
+            SensorMessage message = this->listener.sensor_listen();
             {
                 lock_guard<mutex> lock(mtx);
-                sensors_messages.push_back(message);
+                this->sensors_messages.push_back(message);
             }
+            for(auto e : this->sensors_messages) cout << e.timestump << " - time\n";
             this_thread::sleep_for(chrono::milliseconds(5));
         }
     });
     
-    //обновление списка датчиков, обновление топиков
-    thread update_thread([&]()
+    thread update_thread([this, &mtx]()  // Захватываем this
     {
-        while (running)
+        while (this->running)  
         {
-            vector<Sensor> updated_list = updater.updateTopics();
+            vector<Sensor> updated_list = this->updater.updateTopics();
             {
                 lock_guard<mutex> lock(mtx);
                 for(int i=0; i<updated_list.size(); i++)
                 {
-                    if(!contain(sensor_list, updated_list[i])) sensor_list.push_back(updated_list[i]); 
+                    if(!contain(this->sensor_list, updated_list[i])) this->sensor_list.push_back(updated_list[i]); 
                 }
             }
             this_thread::sleep_for(chrono::milliseconds(5));
         }
     });
     
+    
     //Заполнение пула задач
-    while (running) {
-        try {
+    while (this->running) {
+        try 
+        {
             vector<Sensor> current_sensors;
-            vector <SensorMessage> current_messages;
+            vector<SensorMessage> current_messages;
             
+            if(this->sensor_list.size() != 0 && 
+               this->sensors_messages.size() != 0)
             {
-                lock_guard<mutex> lock(mtx);
-                current_sensors = sensor_list;
-                current_messages = sensors_messages;
+                {
+                    lock_guard<mutex> lock(mtx);
+                    current_messages = worked_messages(this->sensors_messages);
+                    current_sensors = curr_sens(current_messages, this->sensor_list);
+                }
+                
+                if (current_messages.size() == 3 && current_sensors.size() == 3) {
+                    shared_ptr<TriangulationTask> task = make_shared<TriangulationTask>(current_sensors, current_messages);
+                    this->task_pool.addTask(task);
+                    this->sensors_messages = vector <SensorMessage> ();
+                    this->sensor_list = vector <Sensor> ();
+                }
             }
-            if(current_messages.size()>=3 and current_messages[0].mac != current_messages[current_messages.size()-1].mac) // <---- исправить
-            {
-                shared_ptr<TriangulationTask> task = make_shared<TriangulationTask>(current_sensors, current_messages);
-                task_pool.addTask(task);
-            }
-            else continue;
+            
             
             this_thread::sleep_for(chrono::milliseconds(10));
             
-        } catch (const exception& e) {
+        } 
+        catch (const exception& e) 
+        {
             cerr << "Main thread error: " << e.what() << endl;
         }
     }
+    
 
+    listen_thread.join();
+    update_thread.join();
 }
 
 
@@ -125,5 +173,4 @@ void TriangulationService::stop()
 
     Logger logger(".log");
     logger.addWriting("TriangulationService stopped successfully", 'I');
-    //?? а что тут писать??
 } 

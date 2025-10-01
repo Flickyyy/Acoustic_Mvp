@@ -8,7 +8,7 @@ namespace cfg
 {
     // Для редиса:
     const string localhost = "localhost";
-    const string host = ""; 
+    const string host = "localhost"; 
     const int port = 6379;
     const string update_channel = "update_sensors";
     const int count_of_pool = 20;
