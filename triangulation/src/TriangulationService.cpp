@@ -23,9 +23,9 @@
 using namespace std;
 using namespace cfg;
 
-void sensor_output(vector <Sensor> a)
+void message_output(vector <SensorMessage> a)
 {
-    for(auto e : a) cout << e.mac << "\n";
+    for(auto e : a) cout << e.timestump << "\n";
 }
 
 TriangulationService::TriangulationService() : 

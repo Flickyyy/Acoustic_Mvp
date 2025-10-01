@@ -17,7 +17,7 @@ void output(vector <T> a)
     for (int i=0; i<a.size(); i++) cout << a[i] << " ";
     cout << "\n";
 }
-
+/*
 vector <int16_t> hex_to_dec(vector <string> a)
 {
     vector <int16_t> result;
@@ -47,7 +47,7 @@ vector <int16_t> hex_to_dec(vector <string> a)
     }
     return result;
 }
-
+*/
 RedisSubscriber::RedisSubscriber(string host, int port) 
 {
     lock_guard<mutex> lock(context_mutex);
@@ -73,30 +73,35 @@ vector <Sensor> RedisSubscriber::updateTopics()
     Logger logger(".log");
     string message_str = "";
     redisReply* message_repl = nullptr;
+    
+    if(redisGetReply(context, (void**)&message_repl) == REDIS_OK) 
     {
-        lock_guard<mutex> lock(context_mutex);
-        if(redisGetReply(context, (void**)&message_repl) == REDIS_OK) 
+        if (message_repl && 
+            (*message_repl).type == REDIS_REPLY_ARRAY && 
+            (*message_repl).elements == 3)
         {
-            if (message_repl && 
-                (*message_repl).type == REDIS_REPLY_ARRAY && 
-                (*message_repl).elements == 3)
+            string topic_name = "";
+            if ((*message_repl).element[0] && (*(*message_repl).element[0]).str)
             {
-                if ((*message_repl).element[0] && (*(*message_repl).element[0]).str)
-                {
-                    string action = (*(*message_repl).element[0]).str;
-                }
-                if ((*message_repl).element[1] && (*(*message_repl).element[1]).str) 
-                {
-                    string topic_name = (*(*message_repl).element[1]).str;
-                }
-                if ((*message_repl).element[2] && (*(*message_repl).element[2]).str) 
-                {
-                    message_str = (*(*message_repl).element[2]).str;
-                }
+                string action = (*(*message_repl).element[0]).str;
             }
-            else logger.addWriting("error redis remote", 'E');
-            freeReplyObject(message_repl);
+            if ((*message_repl).element[1] && (*(*message_repl).element[1]).str) 
+            {
+                topic_name = (*(*message_repl).element[1]).str;
+            }
+            if ((*message_repl).element[2] && (*(*message_repl).element[2]).str) 
+            {
+                message_str = (*(*message_repl).element[2]).str;
+            }
+            if (topic_name != "update_sensors") 
+            {
+                freeReplyObject(message_repl);
+                return vector<Sensor>(); 
+            }
         }
+        else logger.addWriting("error redis remote", 'E');
+
+        freeReplyObject(message_repl);
     }
     try
     {
@@ -132,11 +137,12 @@ vector <Sensor> RedisSubscriber::updateTopics()
     {
         return vector <Sensor>();
     }
+    
 }
 
 SensorMessage RedisSubscriber::sensor_listen()
 {
-    lock_guard<mutex> lock(context_mutex);
+    
     Logger logger1(".log");
     string message_str = "", topic_name = "";
     redisReply* message_repl = nullptr;
@@ -147,37 +153,30 @@ SensorMessage RedisSubscriber::sensor_listen()
             message_repl->type == REDIS_REPLY_ARRAY && 
             message_repl->elements == 3)
         {
-            // Безопасно получаем topic_name
+
             if (message_repl->element[1] && message_repl->element[1]->str) {
                 topic_name = message_repl->element[1]->str;
             }
-            
-            // Пропускаем сообщения из топика апдейта
-            if (topic_name == "update_sensors") {
-                freeReplyObject(message_repl);
-                return SensorMessage();  // возвращаем пустое сообщение
-            }
-            
-            // Для остальных топиков получаем данные
+
             if (message_repl->element[2] && message_repl->element[2]->str) {
                 message_str = message_repl->element[2]->str;
+            }
+
+            if (topic_name == "update_sensors") 
+            {
+                freeReplyObject(message_repl);
+                return SensorMessage();
             }
         }
         freeReplyObject(message_repl);
     }
-    
-    // Если это топик апдейта или нет данных - выходим
-    if (topic_name == "update_sensors" || message_str.empty()) {
-        return SensorMessage();
-    }
-    
     try
     {
         json data = json::parse(message_str);
         SensorMessage message;
         message.mac = topic_name;
         message.timestump = data["time"];
-        vector<int16_t> temp;
+        vector<int16_t> temp; 
         for(auto e : data["data"]) temp.push_back(e);
         message.pcm_sound = temp;
         return message;
