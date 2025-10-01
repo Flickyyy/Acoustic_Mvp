@@ -14,7 +14,7 @@ class Logger
 {
     private:
         string filename;
-        ifstream fin;
+        ofstream fout;
     public:
 
         void addWriting(string message, char type)
@@ -35,19 +35,19 @@ class Logger
             }
 
             res += " " + message + "\n";
-            fin >> res; 
+            fout << res; 
             cout << res;
         }
 
         Logger(string name)
         {
             filename = name;
-            fin.open(filename);
+            fout.open(filename, ios::app);
         }
 
         ~Logger()
         {
-            fin.close();
+            fout.close();
         }
 
 };
