@@ -24,7 +24,8 @@ using namespace cfg;
 
 Triangulator::Triangulator(vector <Sensor> sensors, vector <SensorMessage> sensors_messages)
 {
-
+    this->sensors = sensors;
+    this->sensors_messages = sensors_messages;
 }
 
 Triangulator::Triangulator(const Point& p1) {
@@ -175,7 +176,7 @@ double CrossCorrelation(SensorMessage message1, SensorMessage message2)
     for(int tau = 0; tau < N; tau++)
     {
         double sum = 0;
-        for(int n = 0; n < N; n++) // Избегаем выхода за границы
+        for(int n = 0; n < N - tau; n++) // Избегаем выхода за границы
         {
             sum += message1.pcm_sound[n] * message2.pcm_sound[n + tau];
         }
@@ -227,13 +228,13 @@ pair<double, double> Triangulator::PointDeterminate() { //##
     
     // Определяем ориентацию через амплитуды 
     int orient1 = 0;
-    if(amp[2] > amp[2])
+    if(amp[0] > amp[1])
     {
         if(sensors[0].y > sensors[1].y) orient1 = 1;
         else if(sensors[0].y < sensors[1].y) orient1 = -1;
         else orient1 = 0;
     }
-    else if(amp[0] < amp[2])
+    else if(amp[0] < amp[1])
     {
         if(sensors[0].y > sensors[1].y) orient1 = -1;
         else if(sensors[0].y < sensors[1].y) orient1 = 1;
@@ -259,13 +260,13 @@ pair<double, double> Triangulator::PointDeterminate() { //##
     else if(alpha2 < 0) alpha2 = alpha2 + PI; 
 
     int orient2 = 0;
-    if(amp[2] > amp[2])
+    if(amp[0] > amp[2])
     {
         if(sensors[0].y > sensors[2].y) orient2 = 1;
         else if(sensors[0].y < sensors[2].y) orient2 = -1;
         else orient2 = 0;
     }
-    else if(amp[2] < amp[2])
+    else if(amp[0] < amp[2])
     {
         if(sensors[0].y > sensors[2].y) orient2 = -1;
         else if(sensors[0].y < sensors[2].y) orient2 = 1;
