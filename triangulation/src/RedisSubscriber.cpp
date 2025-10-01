@@ -18,22 +18,6 @@ void output(vector <T> a)
     cout << "\n";
 }
 
-vector<string> csplit(string s, char element) {
-    vector<string> str_hex;
-    
-    for(int i = 0; i < s.size(); i++) {
-        if(s[i] == element && i + 3 < s.size() && s[i+1] == 'x') {
-            // Нашли \x, теперь извлекаем два HEX символа
-            string hex_byte;
-            hex_byte += s[i+2];  // первая цифра
-            hex_byte += s[i+3];  // вторая цифра
-            str_hex.push_back(hex_byte);
-            i += 3;  // пропускаем \x и две цифры
-        }
-    }
-    return str_hex;
-}
-
 vector <int16_t> hex_to_dec(vector <string> a)
 {
     vector <int16_t> result;
@@ -64,8 +48,9 @@ vector <int16_t> hex_to_dec(vector <string> a)
     return result;
 }
 
-RedisSubscriber::RedisSubscriber(string host, int port)
+RedisSubscriber::RedisSubscriber(string host, int port) 
 {
+    lock_guard<mutex> lock(context_mutex);
     Logger logger(".log");
     context = redisConnect(host.c_str(), port);
     if(context == nullptr || (*context).err ) logger.addWriting("Ошибка подключения", 'E');               
@@ -74,7 +59,8 @@ RedisSubscriber::RedisSubscriber(string host, int port)
 
 void RedisSubscriber::subscribe(string topic)
 {
-    Logger logger(".log"); cout << "!!";
+    lock_guard<mutex> lock(context_mutex);
+    Logger logger(".log");
     string channel_name = "SUBSCRIBE " + topic;
     redisReply* channel_reply = (redisReply*) redisCommand(context, channel_name.c_str());
     if(channel_reply == nullptr) logger.addWriting("Ошибка подписки", 'E');
@@ -82,35 +68,41 @@ void RedisSubscriber::subscribe(string topic)
     freeReplyObject(channel_reply);
 }
 
-vector <Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
+vector <Sensor> RedisSubscriber::updateTopics()
 {
     Logger logger(".log");
     string message_str = "";
     redisReply* message_repl = nullptr;
-    if(redisGetReply(context, (void**)&message_repl) == REDIS_OK) 
     {
-        if (message_repl && 
-            message_repl->type == REDIS_REPLY_ARRAY && 
-            message_repl->elements == 3)
+        lock_guard<mutex> lock(context_mutex);
+        if(redisGetReply(context, (void**)&message_repl) == REDIS_OK) 
         {
-            // Проверяем каждый элемент перед доступом
-            if (message_repl->element[0] && message_repl->element[0]->str) {
-                string action = message_repl->element[0]->str;
+            if (message_repl && 
+                (*message_repl).type == REDIS_REPLY_ARRAY && 
+                (*message_repl).elements == 3)
+            {
+                if ((*message_repl).element[0] && (*(*message_repl).element[0]).str)
+                {
+                    string action = (*(*message_repl).element[0]).str;
+                }
+                if ((*message_repl).element[1] && (*(*message_repl).element[1]).str) 
+                {
+                    string topic_name = (*(*message_repl).element[1]).str;
+                }
+                if ((*message_repl).element[2] && (*(*message_repl).element[2]).str) 
+                {
+                    message_str = (*(*message_repl).element[2]).str;
+                }
             }
-            if (message_repl->element[1] && message_repl->element[1]->str) {
-                string topic_name = message_repl->element[1]->str;
-            }
-            if (message_repl->element[2] && message_repl->element[2]->str) {
-                message_str = message_repl->element[2]->str;
-            }
+            else logger.addWriting("error redis remote", 'E');
+            freeReplyObject(message_repl);
         }
-        else logger.addWriting("error redis remote", 'E');
-        freeReplyObject(message_repl);
     }
     try
     {
         json data = json::parse(message_str);
         vector <Sensor> sensors;
+        topics = vector <string> ();
         if(data.contains("sensors"))
         {
             for(auto e : data["sensors"]) 
@@ -130,7 +122,10 @@ vector <Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
             temp.x = data["x"]; temp.y = data["y"];
             sensors.push_back(temp);
         }
-        for(auto e : topics) subscriber.subscribe(e);
+        for(auto e : topics)
+        {
+            (*this).subscribe(e);
+        } 
         return sensors;
     }
     catch(js_err& err)
@@ -141,33 +136,55 @@ vector <Sensor> RedisSubscriber::updateTopics(RedisSubscriber &subscriber)
 
 SensorMessage RedisSubscriber::sensor_listen()
 {
+    lock_guard<mutex> lock(context_mutex);
     Logger logger1(".log");
     string message_str = "", topic_name = "";
     redisReply* message_repl = nullptr;
+    
     if(redisGetReply(context, (void**)&message_repl) == REDIS_OK) 
     {
-        if ((*message_repl).type == REDIS_REPLY_ARRAY && (*message_repl).elements == 3)
+        if (message_repl && 
+            message_repl->type == REDIS_REPLY_ARRAY && 
+            message_repl->elements == 3)
         {
-            string action = (*(*message_repl).element[0]).str;
-            topic_name = (*(*message_repl).element[1]).str;
-            message_str = (*(*message_repl).element[2]).str;
+            // Безопасно получаем topic_name
+            if (message_repl->element[1] && message_repl->element[1]->str) {
+                topic_name = message_repl->element[1]->str;
+            }
+            
+            // Пропускаем сообщения из топика апдейта
+            if (topic_name == "update_sensors") {
+                freeReplyObject(message_repl);
+                return SensorMessage();  // возвращаем пустое сообщение
+            }
+            
+            // Для остальных топиков получаем данные
+            if (message_repl->element[2] && message_repl->element[2]->str) {
+                message_str = message_repl->element[2]->str;
+            }
         }
         freeReplyObject(message_repl);
     }
+    
+    // Если это топик апдейта или нет данных - выходим
+    if (topic_name == "update_sensors" || message_str.empty()) {
+        return SensorMessage();
+    }
+    
     try
     {
         json data = json::parse(message_str);
         SensorMessage message;
         message.mac = topic_name;
         message.timestump = data["time"];
-        vector <int16_t> temp;
+        vector<int16_t> temp;
         for(auto e : data["data"]) temp.push_back(e);
         message.pcm_sound = temp;
         return message;
     }
-    catch(js_err& err)
+    catch(const json::exception& err)
     {
-        logger1.addWriting("error receiving message", 'E');
+        logger1.addWriting("error receiving message: " + string(err.what()), 'E');
         return SensorMessage();
     }           
 }

@@ -23,22 +23,43 @@
 using namespace std;
 using namespace cfg;
 
+void sensor_output(vector <Sensor> a)
+{
+    for(auto e : a) cout << e.mac << "\n";
+}
+
 TriangulationService::TriangulationService() : 
-    listener(localhost, port),
-    updater(localhost, port),
+    updater("localhost", 6379),    // отдельный контекст для апдейтов
+    listener("localhost", 6379),   // отдельный контекст для прослушивания  
     task_pool(20),
     logger(".log")
 {
-    updater.subscribe(update_channel);
-    sensor_list = updater.updateTopics(listener);
+    updater.subscribe("update_sensors");
+    sensor_list = updater.updateTopics();
+    
+    for (const auto& sensor : sensor_list) {
+        listener.subscribe(sensor.mac);
+    }
+    
     logger.addWriting("Triangulation service start successfully", 'I');
+}
+
+bool contain(vector <Sensor> a, Sensor k)
+{
+    for(auto e : a)
+    {
+        if(e.mac == k.mac) return true;
+    }
+    return false;
 }
 
 void TriangulationService::start()
 {
     atomic <bool> running{true};
     mutex mtx;
-        // прослушивание датчиков
+
+    
+    // прослушивание датчиков
     thread listen_thread([&]()
     {
         while (running) 
@@ -51,21 +72,19 @@ void TriangulationService::start()
             this_thread::sleep_for(chrono::milliseconds(5));
         }
     });
-
+    
     //обновление списка датчиков, обновление топиков
     thread update_thread([&]()
     {
         while (running)
         {
-            vector<Sensor> current_sensors;
+            vector<Sensor> updated_list = updater.updateTopics();
             {
                 lock_guard<mutex> lock(mtx);
-                current_sensors = sensor_list;
-            }
-            vector<Sensor> updated_list = updater.updateTopics(listener);
-            {
-                lock_guard<mutex> lock(mtx);
-                sensor_list = updated_list;
+                for(int i=0; i<updated_list.size(); i++)
+                {
+                    if(!contain(sensor_list, updated_list[i])) sensor_list.push_back(updated_list[i]); 
+                }
             }
             this_thread::sleep_for(chrono::milliseconds(5));
         }
@@ -97,6 +116,7 @@ void TriangulationService::start()
     }
 
 }
+
 
 void TriangulationService::stop()
 {
