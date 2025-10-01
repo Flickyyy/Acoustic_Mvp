@@ -1,6 +1,42 @@
 # acoustic_MVP+
 
+An acoustic triangulation service for determining sound source location using multiple sensors.
 
+## Building the Project
+
+### Prerequisites
+
+- CMake 3.10 or higher
+- C++17 compatible compiler
+- libhiredis-dev (Redis client library)
+- nlohmann-json3-dev (JSON library)
+
+### Installation on Ubuntu/Debian
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake libhiredis-dev nlohmann-json3-dev
+```
+
+### Build Instructions
+
+```bash
+cd triangulation
+mkdir -p build
+cd build
+cmake ..
+make
+```
+
+The executable `triangulation_service` will be created in the build directory.
+
+### Running the Service
+
+The service requires a Redis server to be running. Make sure Redis is available at `localhost:6379` (default configuration).
+
+```bash
+./triangulation_service
+```
 
 ## Getting started
 

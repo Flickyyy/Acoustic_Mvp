@@ -23,19 +23,18 @@ bool compareMessage(const SensorMessage& a, const SensorMessage& b)
 }
 
 TriangulationTask::TriangulationTask(vector <Sensor> sensors, vector <SensorMessage> sensors_messages)
-{ //переписать, добавить массив messages с которыми работаем, добавить массив датчиков с которыми работаем.
-    Triangulator triangulator(sensors, sensors_messages);
+    : triangulator(sensors, sensors_messages)
+{
     Logger logger(".log");
     logger.addWriting("Успешно создана задача", 'I');
-
 }
 
 void TriangulationTask::execute()
 { 
-    string result = to_string(triangulator.PointDeterminate().first) + " " + to_string(triangulator.PointDeterminate().second);
+    pair<double, double> coordinates = triangulator.PointDeterminate();
+    string result = to_string(coordinates.first) + " " + to_string(coordinates.second);
     RedisPublisher publisher(host, port, publish_channel);
     publisher.publish(publish_channel, result);
     Logger logger(".log");
     logger.addWriting("Cord is: " + result, 'I');
-    
 }
