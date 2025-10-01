@@ -85,12 +85,6 @@ Point Triangulator::combine() const {
     throw std::runtime_error("Invalid number of points");
 }
 
-double normalizePhase(double phase) {
-    while (phase > 2*PI) phase -= 2 * PI;
-    while (phase < -2*PI) phase += 2 * PI;
-    return phase;
-}
-
 pair<double, double> SpecialNewton(const Hyper& h1, const Hyper& h2) {
     pair<double, double> result(NAN, NAN);
 
@@ -159,105 +153,62 @@ pair<double, double> SpecialNewton(const Hyper& h1, const Hyper& h2) {
 }
 
 
-void fft(valarray<complex<double>>& x) {
-    const size_t N = x.size();
-    if (N <= 1) return;
-
-    valarray<complex<double>> even = x[slice(0, N/2, 2)];
-    valarray<complex<double>> odd  = x[slice(1, N/2, 2)];
-
-    fft(even);
-    fft(odd);
-
-    for (size_t k = 0; k < N/2; ++k) {
-        complex<double> t = polar(1.0, -2 * PI * k / N) * odd[k];
-        x[k] = even[k] + t;
-        x[k + N/2] = even[k] - t;
-    }
-}
-
-double FindGlobalFreq(const vector<SensorMessage>& signals) {
-    int N = signals[0].pcm_sound.size();
-    int best_bin = 0;
-    double max_amp = 0;
-    valarray<complex<double>> x(N);
-
-    for (const auto& sig : signals) {
-        for (int i = 0; i < N; i++)
-            x[i] = complex<double>(sig.pcm_sound[i] * 0.5 * (1 - cos(2*PI*i/(N-1))),0);
-
-        fft(x);
-        x /= (double)N;
-
-        for (int k = 0; k < N/2; k++) {
-            if (abs(x[k]) > max_amp) {
-                max_amp = abs(x[k]);
-                best_bin = k;
-            }
-        }
-    }
-
-    return best_bin * Fs / N;
-}
-
-vector<double> ConstsDeterminate(const vector<int16_t>& pcm_data) {
-    const int N = pcm_data.size();
-    valarray<complex<double>> x(N);
-
-    for (int i = 0; i < N; i++)
-        x[i] = complex<double>(pcm_data[i] * 0.5 * (1 - cos(2 * PI * i / (N - 1))), 0);
-
-    fft(x);
-    x /= (double)N;
-
-    int k_max = 0;
-    double max_amp = 0;
-    for (int k = 0; k < N/2; k++) {
-        double amp = abs(x[k]);
-        if (amp > max_amp) {
-            max_amp = amp;
-            k_max = k;
-        }
-    }
-
-    double phase = arg(x[k_max]);
-    double freq  = k_max * Fs / (double)N;
-
-    double amp = max_amp;
-
+double CrossCorrelation(SensorMessage message1, SensorMessage message2)
+{
+    // Нормируем сигналы
+    double avg1 = 0, avg2 = 0;
     
+    // Вычисляем средние
+    for(auto e : message1.pcm_sound) avg1 += e;
+    avg1 /= message1.pcm_sound.size();
+    for(auto& e : message1.pcm_sound) e -= avg1;  // Добавлен & для изменения исходных данных
+    
+    for(auto e : message2.pcm_sound) avg2 += e;
+    avg2 /= message2.pcm_sound.size();
+    for(auto& e : message2.pcm_sound) e -= avg2;  // Добавлен & для изменения исходных данных
+    
+    cout << avg1 << " - it is avg 1\n";
+    cout << avg2 << " - it is avg 2\n";
 
-    return {phase, freq, amp};
+    vector<double> R(N, 0.0); // Вектор размером N
+    
+    for(int tau = 0; tau < N; tau++)
+    {
+        double sum = 0;
+        for(int n = 0; n < N; n++) // Избегаем выхода за границы
+        {
+            sum += message1.pcm_sound[n] * message2.pcm_sound[n + tau];
+        }
+        R[tau] = sum;
+    }
+
+    int max_id = max_element(R.begin(), R.end()) - R.begin();
+    return static_cast<double>(max_id) * 20.83e-6;
 }
 
 pair<double, double> Triangulator::PointDeterminate() { //##
     pair<double, double> cords(0, 0);
-    
-    // Вычисляем фазу и частоту для каждого датчика
-    for (int i = 0; i < 3; i++) {
-        sensors[i].c = ConstsDeterminate(sensors_messages[i].pcm_sound);   
-    }
-    cout << sensors[0].c[1] << " " << sensors[1].c[1] << " " << sensors[2].c[1] << " freq\n";
-    // Вычисляем разности фаз и нормализуем их
-    double delta_phase1 = abs(sensors[0].c[0] - sensors[1].c[0]);
-    double delta_phase2 = abs(sensors[0].c[0] - sensors[2].c[0]);
+    vector <double> amp;
+    amp.push_back(*max_element(sensors_messages[0].pcm_sound.begin(), sensors_messages[0].pcm_sound.end()));
+    amp.push_back(*max_element(sensors_messages[1].pcm_sound.begin(), sensors_messages[1].pcm_sound.end()));
+    amp.push_back(*max_element(sensors_messages[2].pcm_sound.begin(), sensors_messages[2].pcm_sound.end()));
 
+    // Вычисляем фазу и частоту для каждого датчика
     // Вычисляем разности времен
-    double delta_t1 = delta_phase1 / (2 * PI * FindGlobalFreq(sensors_messages));
-    double delta_t2 = delta_phase2 / (2 * PI * FindGlobalFreq(sensors_messages));
-    
+    double delta_t1 = CrossCorrelation(sensors_messages[0], sensors_messages[1]); cout << delta_t1 << "\n";
+    double delta_t2 = CrossCorrelation(sensors_messages[0], sensors_messages[2]); cout << delta_t2 << "\n";
+    cout << delta_t1 << "  " << delta_t2 << " t\n";
     // Вычисляем разности расстояний
     double delta_d1 = delta_t1 * sound_speed;
     double delta_d2 = delta_t2 * sound_speed;
-    cout << delta_d2 << "\n";
     
     // Координаты датчиков
     double x1 = sensors[0].x, y1 = sensors[0].y;
     double x2 = sensors[1].x, y2 = sensors[1].y;
     double x3 = sensors[2].x, y3 = sensors[2].y;
     
-    cout << x1 << " " << y1 << "\n";
-    cout << x2 << " " << y2 << "\n";
+    cout << sensors.size() << " " << amp.size() << "\n";
+    cout << sensors_messages.size() << "\n";
 
     // Вычисляем параметры первой гиперболы (между датчиками 1 и 2)
     double R = sqrt(pow((x2 - x1), 2) + pow(y2- y1, 2));
@@ -276,15 +227,13 @@ pair<double, double> Triangulator::PointDeterminate() { //##
     
     // Определяем ориентацию через амплитуды 
     int orient1 = 0;
-
-    cout << sensors[0].c[2] << " " << sensors[1].c[2] << " " << sensors[2].c[2] << " amp\n";
-    if(sensors[0].c[2] > sensors[1].c[2])
+    if(amp[2] > amp[2])
     {
         if(sensors[0].y > sensors[1].y) orient1 = 1;
         else if(sensors[0].y < sensors[1].y) orient1 = -1;
         else orient1 = 0;
     }
-    else if(sensors[0].c[2] > sensors[1].c[2])
+    else if(amp[0] < amp[2])
     {
         if(sensors[0].y > sensors[1].y) orient1 = -1;
         else if(sensors[0].y < sensors[1].y) orient1 = 1;
@@ -310,13 +259,13 @@ pair<double, double> Triangulator::PointDeterminate() { //##
     else if(alpha2 < 0) alpha2 = alpha2 + PI; 
 
     int orient2 = 0;
-    if(sensors[0].c[2] > sensors[2].c[2])
+    if(amp[2] > amp[2])
     {
         if(sensors[0].y > sensors[2].y) orient2 = 1;
         else if(sensors[0].y < sensors[2].y) orient2 = -1;
         else orient2 = 0;
     }
-    else if(sensors[0].c[2] < sensors[2].c[2])
+    else if(amp[2] < amp[2])
     {
         if(sensors[0].y > sensors[2].y) orient2 = -1;
         else if(sensors[0].y < sensors[2].y) orient2 = 1;
