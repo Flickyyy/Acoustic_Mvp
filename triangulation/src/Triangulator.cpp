@@ -282,3 +282,17 @@ pair<double, double> Triangulator::PointDeterminate() { //##
     return cords;
 }
 
+void Triangulator::SetEventSelectionStrategy()
+{
+    // Placeholder implementation for event selection strategy
+    // This can be expanded based on specific requirements
+}
+
+vector<int16_t> Triangulator::readWavFile(const string& filename)
+{
+    // Placeholder implementation for reading WAV files
+    // Returns an empty vector for now
+    // This can be expanded based on specific requirements
+    return vector<int16_t>();
+}
+
