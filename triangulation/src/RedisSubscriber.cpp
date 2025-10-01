@@ -17,37 +17,7 @@ void output(vector <T> a)
     for (int i=0; i<a.size(); i++) cout << a[i] << " ";
     cout << "\n";
 }
-/*
-vector <int16_t> hex_to_dec(vector <string> a)
-{
-    vector <int16_t> result;
 
-    for(int i=0; i<a.size(); i+=2)
-    {
-        int temp = 0;
-        for(int j=0; j<a[i].size(); j++)
-        {
-            if(a[i+1][j] == 'A') temp += 10*pow(16, 2*a[i].size()-j-1);
-            else if(a[i+1][j] == 'B') temp += 11*pow(16, 2*a[i].size()-j-1);
-            else if(a[i+1][j] == 'C') temp += 12*pow(16, 2*a[i].size()-j-1);
-            else if(a[i+1][j] == 'D') temp += 13*pow(16, 2*a[i].size()-j-1);
-            else if(a[i+1][j] == 'E') temp += 14*pow(16, 2*a[i].size()-j-1);
-            else if(a[i+1][j] == 'F') temp += 15*pow(16, 2*a[i].size()-j-1);
-            else temp += (a[i+1][j] - '0')*pow(16, 2*a[i].size() - j -1);
-
-            if(a[i][j] == 'A') temp += 10*pow(16, a[i].size()-j-1);
-            else if(a[i][j] == 'B') temp += 11*pow(16, a[i].size()-j-1);
-            else if(a[i][j] == 'C') temp += 12*pow(16, a[i].size()-j-1);
-            else if(a[i][j] == 'D') temp += 13*pow(16, a[i].size()-j-1);
-            else if(a[i][j] == 'E') temp += 14*pow(16, a[i].size()-j-1);
-            else if(a[i][j] == 'F') temp += 15*pow(16, a[i].size()-j-1);
-            else temp += (a[i][j] - '0')*pow(16, a[i].size()-j-1);
-        }
-        result.push_back(temp);
-    }
-    return result;
-}
-*/
 RedisSubscriber::RedisSubscriber(string host, int port) 
 {
     lock_guard<mutex> lock(context_mutex);
