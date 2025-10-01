@@ -23,22 +23,43 @@
 using namespace std;
 using namespace cfg;
 
+void message_output(vector <SensorMessage> a)
+{
+    for(auto e : a) cout << e.timestump << "\n";
+}
+
 TriangulationService::TriangulationService() : 
-    listener(localhost, port),
-    updater(localhost, port),
+    updater("localhost", 6379),    // отдельный контекст для апдейтов
+    listener("localhost", 6379),   // отдельный контекст для прослушивания  
     task_pool(20),
     logger(".log")
 {
-    updater.subscribe(update_channel);
-    sensor_list = updater.updateTopics(listener);
+    updater.subscribe("update_sensors");
+    sensor_list = updater.updateTopics();
+    
+    for (const auto& sensor : sensor_list) {
+        listener.subscribe(sensor.mac);
+    }
+    
     logger.addWriting("Triangulation service start successfully", 'I');
+}
+
+bool contain(vector <Sensor> a, Sensor k)
+{
+    for(auto e : a)
+    {
+        if(e.mac == k.mac) return true;
+    }
+    return false;
 }
 
 void TriangulationService::start()
 {
     atomic <bool> running{true};
     mutex mtx;
-        // прослушивание датчиков
+
+    
+    // прослушивание датчиков
     thread listen_thread([&]()
     {
         while (running) 
@@ -48,32 +69,23 @@ void TriangulationService::start()
                 lock_guard<mutex> lock(mtx);
                 sensors_messages.push_back(message);
             }
-            for(auto e : sensors_messages)
-            {
-                for(auto k : e.pcm_sound) cout << k;
-                cout << "\n";
-            }
             this_thread::sleep_for(chrono::milliseconds(5));
         }
     });
-
+    
     //обновление списка датчиков, обновление топиков
     thread update_thread([&]()
     {
         while (running)
         {
-            vector<Sensor> current_sensors;
+            vector<Sensor> updated_list = updater.updateTopics();
             {
                 lock_guard<mutex> lock(mtx);
-                current_sensors = sensor_list;
+                for(int i=0; i<updated_list.size(); i++)
+                {
+                    if(!contain(sensor_list, updated_list[i])) sensor_list.push_back(updated_list[i]); 
+                }
             }
-            vector<Sensor> updated_list = updater.updateTopics(listener);
-            {
-                lock_guard<mutex> lock(mtx);
-                sensor_list = updated_list;
-            }
-            for(auto e : current_sensors) cout << e.mac << " ";
-            cout << "\n";
             this_thread::sleep_for(chrono::milliseconds(5));
         }
     });
@@ -89,7 +101,7 @@ void TriangulationService::start()
                 current_sensors = sensor_list;
                 current_messages = sensors_messages;
             }
-            if(current_messages.size()>=3)
+            if(current_messages.size()>=3 and current_messages[0].mac != current_messages[current_messages.size()-1].mac) // <---- исправить
             {
                 shared_ptr<TriangulationTask> task = make_shared<TriangulationTask>(current_sensors, current_messages);
                 task_pool.addTask(task);
@@ -104,6 +116,7 @@ void TriangulationService::start()
     }
 
 }
+
 
 void TriangulationService::stop()
 {

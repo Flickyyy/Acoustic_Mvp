@@ -35,7 +35,8 @@ class Logger
             }
 
             res += " " + message + "\n";
-            fin >> res; cerr << res;
+            fin >> res; 
+            cout << res;
         }
 
         Logger(string name)

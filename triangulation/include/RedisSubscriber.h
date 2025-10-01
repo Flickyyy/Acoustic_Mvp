@@ -3,6 +3,7 @@
 #define REDIS_SUBSCRIBER_H
 
 #include <iostream>
+#include <mutex>
 #include <set>
 #include <vector>
 #include <hiredis/hiredis.h>
@@ -18,6 +19,7 @@ class RedisSubscriber
     private:
         redisContext* context;
         vector <string> topics;
+        mutex context_mutex;
     public:
 
         RedisSubscriber() {}
@@ -27,7 +29,7 @@ class RedisSubscriber
         }
         SensorMessage sensor_listen();
         void subscribe(string topic);
-        vector <Sensor> updateTopics(RedisSubscriber &subscriber);
+        vector <Sensor> updateTopics();
 };
 
 #endif //REDIS_SUBSCRIBER_H

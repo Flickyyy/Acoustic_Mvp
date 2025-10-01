@@ -29,23 +29,21 @@ using namespace cfg;
 
 class TriangulationService
 {
-    private:
-        RedisSubscriber updater, listener;
-        ThreadPool task_pool;
-        Logger logger;
+private:
+    RedisSubscriber updater, listener;
+    ThreadPool task_pool;
+    Logger logger;
 
-        vector <SensorMessage> sensors_messages;
-        vector <Sensor> sensor_list;
+    vector<SensorMessage> sensors_messages;
+    vector<Sensor> sensor_list;
 
-        atomic <bool> running{true};
+    atomic<bool> running{true};
 
-    public:
-        
-        TriangulationService();
+public:
+    TriangulationService();
 
-        void start();
-
-        void stop();
+    void start();
+    void stop();
 };
 
 #endif //TRIANGULATION_SERVICE_H
